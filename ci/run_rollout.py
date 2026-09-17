@@ -1,9 +1,31 @@
 #!/usr/bin/env python3
-"""One-rollout probe runner for CI. Runs harbor on the task with the gate model via OpenRouter,
-then extracts reward + assistant turn count into result_<slot>.json."""
-import argparse, json, os, pathlib, subprocess, sys, time
+"""One-rollout probe runner for CI, with an in-process stall killer.
+Runs harbor (claude-code + OpenRouter gate model). A watcher thread finds the agent container for
+this slot's job and kills a stalled 'claude --verbose' whose session jsonl is idle > STALL_SEC,
+letting harbor retry instead of burning the full timeout on a hung model stream."""
+import argparse, json, os, pathlib, subprocess, sys, threading, time
 
 GATE_MODEL = os.environ.get("GATE_MODEL", "tencent/hy4-preview")
+STALL_SEC = int(os.environ.get("STALL_SEC", "600"))
+
+def docker(*args, timeout=60):
+    try:
+        return subprocess.run(["docker", *args], capture_output=True, text=True, timeout=timeout)
+    except Exception:
+        return None
+
+def stall_watcher(job, stop):
+    while not stop.is_set():
+        r = docker("ps", "--format", "{{.Names}}")
+        names = (r.stdout.split() if r and r.stdout else [])
+        for c in names:
+            if "main" not in c:  # harbor task container ends with -main-1
+                continue
+            script = ("f=$(find /logs -name '*.jsonl' -path '*projects*' 2>/dev/null | head -1); "
+                      "if [ -n \"$f\" ]; then age=$(( $(date +%s) - $(stat -c %Y \"$f\") )); "
+                      "if [ $age -gt %d ]; then pkill -9 -f 'claude --verbose'; echo killed; fi; fi" % STALL_SEC)
+            docker("exec", c, "sh", "-c", script)
+        stop.wait(120)
 
 def run_one(task, slot, jobs_dir, setup_mult):
     key = os.environ["OPENROUTER_API_KEY"]
@@ -17,29 +39,36 @@ def run_one(task, slot, jobs_dir, setup_mult):
         "--ae", "ANTHROPIC_DEFAULT_SONNET_MODEL=%s" % GATE_MODEL,
         "--ae", "ANTHROPIC_DEFAULT_HAIKU_MODEL=%s" % GATE_MODEL,
         "--agent-setup-timeout-multiplier", str(setup_mult),
+        "--max-retries", "2",
         "--job-name", job, "-o", str(jobs_dir), "-k", "1", "-n", "1", "-y",
     ]
-    print("RUN:", " ".join(c if "AUTH_TOKEN" not in c else "ANTHROPIC_AUTH_TOKEN=***" for c in cmd), flush=True)
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=int(os.environ.get("ROLLOUT_TIMEOUT", "18000")))
-    sys.stdout.write(proc.stdout[-4000:]); sys.stderr.write(proc.stderr[-4000:])
+    print("RUN slot", slot, flush=True)
+    stop = threading.Event()
+    t = threading.Thread(target=stall_watcher, args=(job, stop), daemon=True); t.start()
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True,
+                              timeout=int(os.environ.get("ROLLOUT_TIMEOUT", "10800")))
+        sys.stdout.write(proc.stdout[-4000:]); sys.stderr.write(proc.stderr[-2000:])
+    finally:
+        stop.set()
     return pathlib.Path(jobs_dir) / job
 
 def harvest(job_dir):
-    reward = None; turns = None; asst = 0
+    reward = turns = None; asst = 0
     for trial in sorted(pathlib.Path(job_dir).glob("*__*")):
         rw = trial / "verifier" / "reward.txt"
         if rw.exists():
             try: reward = float(rw.read_text().strip())
             except ValueError: pass
-        # turns: prefer claude-code.txt num_turns; else count assistant in session jsonl
         log = trial / "agent" / "claude-code.txt"
         if log.exists():
-            for line in reversed(log.read_text(encoding="utf-8", errors="replace").splitlines()):
+            lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
+            for line in reversed(lines):
                 if '"num_turns"' in line:
                     try: turns = json.loads(line).get("num_turns")
                     except Exception: pass
                     break
-            asst = sum(1 for l in log.read_text(encoding="utf-8", errors="replace").splitlines() if '"type":"assistant"' in l)
+            asst = sum(1 for l in lines if '"type":"assistant"' in l)
         if asst == 0:
             for jl in trial.glob("agent/sessions/projects/*/*.jsonl"):
                 asst = max(asst, sum(1 for l in jl.read_text(encoding="utf-8", errors="replace").splitlines() if '"type":"assistant"' in l))
@@ -47,14 +76,11 @@ def harvest(job_dir):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--task", required=True)
-    ap.add_argument("--slot", required=True)
-    ap.add_argument("--jobs-dir", default="jobs")
-    ap.add_argument("--setup-multiplier", default="4")
+    ap.add_argument("--task", required=True); ap.add_argument("--slot", required=True)
+    ap.add_argument("--jobs-dir", default="jobs"); ap.add_argument("--setup-multiplier", default="4")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
-    t0 = time.time()
-    err = None
+    t0 = time.time(); err = None
     try:
         jd = run_one(a.task, a.slot, a.jobs_dir, a.setup_multiplier)
         reward, turns, asst = harvest(jd)
