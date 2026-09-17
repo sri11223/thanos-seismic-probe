@@ -6,7 +6,7 @@ letting harbor retry instead of burning the full timeout on a hung model stream.
 import argparse, json, os, pathlib, subprocess, sys, threading, time
 
 GATE_MODEL = os.environ.get("GATE_MODEL", "tencent/hy4-preview")
-STALL_SEC = int(os.environ.get("STALL_SEC", "600"))
+STALL_SEC = int(os.environ.get("STALL_SEC", "300"))
 
 def docker(*args, timeout=60):
     try:
@@ -39,7 +39,8 @@ def run_one(task, slot, jobs_dir, setup_mult):
         "--ae", "ANTHROPIC_DEFAULT_SONNET_MODEL=%s" % GATE_MODEL,
         "--ae", "ANTHROPIC_DEFAULT_HAIKU_MODEL=%s" % GATE_MODEL,
         "--agent-setup-timeout-multiplier", str(setup_mult),
-        "--max-retries", "2",
+        "--agent-timeout-multiplier", os.environ.get("AGENT_TIMEOUT_MULT", "0.09"),
+        "--max-retries", "3",
         "--job-name", job, "-o", str(jobs_dir), "-k", "1", "-n", "1", "-y",
     ]
     print("RUN slot", slot, flush=True)
