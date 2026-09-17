@@ -1,0 +1,90 @@
+name: thanos-quality-probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "task path"
+        default: "tasks/seismic-station-record-recovery"
+      setup_multiplier:
+        description: "agent setup timeout multiplier"
+        default: "4"
+
+concurrency:
+  group: probe-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install harbor
+        run: pip install harbor==0.14.0
+      - name: Oracle + NOP validation
+        run: python ci/validate_oracle.py "${{ github.event.inputs.task || 'tasks/seismic-station-record-recovery' }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oracle-verdict
+          path: oracle_verdict.json
+
+  probe:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        slot: [1, 2, 3, 4, 5, 6, 7, 8]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install harbor
+        run: pip install harbor==0.14.0
+      - name: Run rollout slot ${{ matrix.slot }}
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GATE_MODEL: tencent/hy4-preview
+          ROLLOUT_TIMEOUT: "18000"
+        run: |
+          mkdir -p results
+          python ci/run_rollout.py \
+            --task "${{ github.event.inputs.task || 'tasks/seismic-station-record-recovery' }}" \
+            --slot "${{ matrix.slot }}" \
+            --setup-multiplier "${{ github.event.inputs.setup_multiplier || '4' }}" \
+            --out "results/result_${{ matrix.slot }}.json"
+      - uses: actions/upload-artifact@v4
+        if: always( }}
+        with:
+          name: result-${{ matrix.slot }}
+          path: results/result_${{ matrix.slot }}.json
+
+  aggregate:
+    needs: probe
+    if: always( }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download all slot results
+        uses: actions/download-artifact@v4
+        with:
+          path: results
+          pattern: result-*
+      - name: Aggregate verdict
+        run: python ci/aggregate.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verdict
+          path: verdict.json
+      - name: Print verdict
+        run: cat verdict.json

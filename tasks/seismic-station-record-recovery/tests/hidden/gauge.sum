@@ -1,0 +1,10 @@
+{
+  "capture": "gauge",
+  "clip_run_max": 0,
+  "committed_count": 55,
+  "counter_span": 135000,
+  "digest": 3455459323,
+  "gain_mean_dwell": 1070,
+  "lockloss_run_max": 0,
+  "peak_abs": 135120
+}

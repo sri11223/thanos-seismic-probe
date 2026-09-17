@@ -1,0 +1,10 @@
+{
+  "capture": "cap04",
+  "clip_run_max": 3,
+  "committed_count": 100,
+  "counter_span": 767,
+  "digest": 1849234959,
+  "gain_mean_dwell": 1332,
+  "lockloss_run_max": 0,
+  "peak_abs": 1057
+}
