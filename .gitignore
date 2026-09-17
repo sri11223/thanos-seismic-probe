@@ -1,7 +1,7 @@
+/jobs/
+/results/
+/probe*.log
+/probe*.err
 _gen_build_hidden/
-jobs/
-results/
-*.log
-*.err
 __pycache__/
 *.pyc
