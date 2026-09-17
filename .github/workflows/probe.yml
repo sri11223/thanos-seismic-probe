@@ -53,6 +53,7 @@ jobs:
           GATE_MODEL: tencent/hy4-preview
           STALL_SEC: "600"
           ROLLOUT_TIMEOUT: "10800"
+          CI_TASK_TIMEOUT: "2400"
         run: |
           mkdir -p results
           python ci/run_rollout.py \

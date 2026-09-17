@@ -27,8 +27,25 @@ def stall_watcher(job, stop):
             docker("exec", c, "sh", "-c", script)
         stop.wait(120)
 
+import re, shutil
+def ci_task_copy(task):
+    tt = os.environ.get("CI_TASK_TIMEOUT")
+    if not tt:
+        return task
+    src = pathlib.Path(task)
+    dst = src.parent / (src.name + "_ci%s" % os.getpid())
+    if dst.exists():
+        return str(dst)
+    shutil.copytree(src, dst)
+    toml = dst / "task.toml"
+    t = toml.read_text()
+    t = re.sub(r"(\[agent\][^\[]*?timeout_sec\s*=\s*)\d+", r"\g<1>%s" % tt, t, flags=re.S)
+    toml.write_text(t)
+    return str(dst)
+
 def run_one(task, slot, jobs_dir, setup_mult):
     key = os.environ["OPENROUTER_API_KEY"]
+    task = ci_task_copy(task)
     job = "gate-slot%s" % slot
     cmd = [
         "harbor", "run", "-p", str(task), "--agent", "claude-code", "--model", GATE_MODEL,
