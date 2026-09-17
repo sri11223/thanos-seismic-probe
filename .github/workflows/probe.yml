@@ -60,14 +60,14 @@ jobs:
             --setup-multiplier "${{ github.event.inputs.setup_multiplier || '4' }}" \
             --out "results/result_${{ matrix.slot }}.json"
       - uses: actions/upload-artifact@v4
-        if: always( }}
+        if: always()
         with:
           name: result-${{ matrix.slot }}
           path: results/result_${{ matrix.slot }}.json
 
   aggregate:
     needs: probe
-    if: always( }}
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
