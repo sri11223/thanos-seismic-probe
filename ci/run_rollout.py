@@ -105,7 +105,12 @@ def harvest(job_dir):
         if asst == 0:
             for jl in trial.glob("agent/sessions/projects/*/*.jsonl"):
                 asst = max(asst, sum(1 for l in jl.read_text(encoding="utf-8", errors="replace").splitlines() if '"type":"assistant"' in l))
-    return reward, turns, asst, fails
+    diffs=None
+    for trial in sorted(pathlib.Path(job_dir).glob("*__*")):
+        for dp in trial.glob("verifier/**/diffs.txt"):
+            try: diffs=dp.read_text(encoding="utf-8", errors="replace")
+            except Exception: pass
+    return reward, turns, asst, fails, diffs
 
 def main():
     ap = argparse.ArgumentParser()
@@ -116,11 +121,11 @@ def main():
     t0 = time.time(); err = None
     try:
         jd = run_one(a.task, a.slot, a.jobs_dir, a.setup_multiplier)
-        reward, turns, asst, fails = harvest(jd)
+        reward, turns, asst, fails, diffs = harvest(jd)
     except Exception as e:
-        reward, turns, asst, fails = None, None, 0, []; err = repr(e)
+        reward, turns, asst, fails, diffs = None, None, 0, [], None; err = repr(e)
     res = {"slot": a.slot, "reward": reward, "num_turns": turns, "assistant_turns": asst, "failed_tests": fails,
-           "seconds": round(time.time()-t0, 1), "error": err}
+           "seconds": round(time.time()-t0, 1), "error": err, "diffs": diffs}
     pathlib.Path(a.out).write_text(json.dumps(res, indent=2), encoding="utf-8")
     print("RESULT:", json.dumps(res), flush=True)
 
