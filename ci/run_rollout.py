@@ -39,7 +39,8 @@ def ci_task_copy(task):
     shutil.copytree(src, dst)
     toml = dst / "task.toml"
     t = toml.read_text()
-    t = re.sub(r"(\[agent\][^\[]*?timeout_sec\s*=\s*)\d+", r"\g<1>%s" % tt, t, flags=re.S)
+    t = re.sub(r"(\[agent\]\s*\ntimeout_sec\s*=\s*)\d+", r"\g<1>%s" % tt, t)
+    assert ("timeout_sec = %s" % tt) in t, "CI_TASK_TIMEOUT regex did not apply"
     toml.write_text(t)
     return str(dst)
 
