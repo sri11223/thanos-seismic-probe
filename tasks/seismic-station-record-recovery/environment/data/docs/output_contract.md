@@ -70,5 +70,7 @@ sample.
   coil checks only in calibration_chart.json.
 - config_timeline "pod" and inventory "pod" are the pod KEY from the certificate ("A", "B", ...),
   never the pod serial ("PZ-A17"). Map an INSTALL serial to its key via the certificate.
-- from_t is the INSTALL event epoch after the clock correction is applied to every event stamp
-  written strictly before the CLOCK_SET line (stamps at or after it are already correct).
+- from_t is the INSTALL event epoch corrected for the clock error: for any event whose raw
+  stamp is strictly before the CLOCK_SET line, ADD the CLOCK_SET delta (from_t = raw + delta);
+  events at or after the CLOCK_SET line keep their stamp. The same corrected-time rule applies to
+  every capture epoch and to the ordering/lookup of environmental rows.
