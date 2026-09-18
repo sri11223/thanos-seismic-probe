@@ -59,6 +59,7 @@ def run_one(task, slot, jobs_dir, setup_mult):
         "--agent-setup-timeout-multiplier", str(setup_mult),
         "--agent-timeout-multiplier", os.environ.get("AGENT_TIMEOUT_MULT", "0.09"),
         "--max-retries", "3",
+        "--verifier-include-logs", "**/*",
         "--job-name", job, "-o", str(jobs_dir), "-k", "1", "-n", "1", "-y",
     ]
     print("RUN slot", slot, flush=True)
@@ -72,9 +73,22 @@ def run_one(task, slot, jobs_dir, setup_mult):
         stop.set()
     return pathlib.Path(jobs_dir) / job
 
+def collect_fails(trial):
+    fails = []
+    for ctrf in trial.glob("verifier/**/ctrf.json"):
+        try:
+            data = json.load(open(ctrf))
+            for t in data.get("results", {}).get("tests", []):
+                if t.get("status") != "passed":
+                    fails.append(t.get("name"))
+        except Exception:
+            pass
+    return fails
+
 def harvest(job_dir):
-    reward = turns = None; asst = 0
+    reward = turns = None; asst = 0; fails = []
     for trial in sorted(pathlib.Path(job_dir).glob("*__*")):
+        fails = collect_fails(trial) or fails
         rw = trial / "verifier" / "reward.txt"
         if rw.exists():
             try: reward = float(rw.read_text().strip())
@@ -91,7 +105,7 @@ def harvest(job_dir):
         if asst == 0:
             for jl in trial.glob("agent/sessions/projects/*/*.jsonl"):
                 asst = max(asst, sum(1 for l in jl.read_text(encoding="utf-8", errors="replace").splitlines() if '"type":"assistant"' in l))
-    return reward, turns, asst
+    return reward, turns, asst, fails
 
 def main():
     ap = argparse.ArgumentParser()
@@ -102,10 +116,10 @@ def main():
     t0 = time.time(); err = None
     try:
         jd = run_one(a.task, a.slot, a.jobs_dir, a.setup_multiplier)
-        reward, turns, asst = harvest(jd)
+        reward, turns, asst, fails = harvest(jd)
     except Exception as e:
-        reward, turns, asst = None, None, 0; err = repr(e)
-    res = {"slot": a.slot, "reward": reward, "num_turns": turns, "assistant_turns": asst,
+        reward, turns, asst, fails = None, None, 0, []; err = repr(e)
+    res = {"slot": a.slot, "reward": reward, "num_turns": turns, "assistant_turns": asst, "failed_tests": fails,
            "seconds": round(time.time()-t0, 1), "error": err}
     pathlib.Path(a.out).write_text(json.dumps(res, indent=2), encoding="utf-8")
     print("RESULT:", json.dumps(res), flush=True)
