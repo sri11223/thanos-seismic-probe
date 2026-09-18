@@ -7,8 +7,10 @@ __pycache__/
 *.pyc
 
 # local scratch / secrets (never commit)
-_*
-oracle_verdict.json
+/_*
+/oracle_verdict.json
 /_ci_run1/
-tasks/**/_*
+/_ci_live*/
+tasks/**/_patch_*.py
+tasks/**/_*.json
 
