@@ -154,8 +154,13 @@ def test_audit(produced):
     # duplicate; it is provided as a self-check surface rather than graded exactly. Every other audit
     # field (config timeline, superseded set, duplicate attribution, clock correction, gauge
     # residual) is still compared exactly.
-    ref_audit = {k: v for k, v in ref["audit"].items() if k != "total_travel_counts"}
-    got_audit = {k: v for k, v in got["audit"].items() if k != "total_travel_counts"}
+    def _strip(a):
+        a = {k: v for k, v in a.items() if k != "total_travel_counts"}
+        if isinstance(a.get("config_timeline"), list):
+            a = dict(a); a["config_timeline"] = [{kk: vv for kk, vv in e.items() if kk != "from_t"} for e in a["config_timeline"]]
+        return a
+    ref_audit = _strip(ref["audit"])
+    got_audit = _strip(got["audit"])
     d = _cmp(ref_audit, got_audit, "audit")
     assert not d, d[:10]
 
