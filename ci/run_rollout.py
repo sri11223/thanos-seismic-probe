@@ -23,7 +23,7 @@ def stall_watcher(job, stop):
                 continue
             script = ("f=$(find /logs -name '*.jsonl' -path '*projects*' 2>/dev/null | head -1); "
                       "if [ -n \"$f\" ]; then age=$(( $(date +%s) - $(stat -c %Y \"$f\") )); "
-                      "if [ $age -gt %d ]; then pkill -9 -f 'claude --verbose'; echo killed; fi; fi" % STALL_SEC)
+                      "if [ $age -gt " + str(STALL_SEC) + " ]; then pkill -9 -f 'claude --verbose'; echo killed; fi; fi")
             docker("exec", c, "sh", "-c", script)
         stop.wait(120)
 
