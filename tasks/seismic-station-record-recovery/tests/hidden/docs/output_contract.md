@@ -85,3 +85,10 @@ sample.
   corrected_epoch is the capture header epoch after the clock correction (add the CLOCK_SET delta
   if the raw epoch is strictly before the CLOCK_SET line). The rate is 1 sample per second, so
   each committed sample advances t by exactly 1; t is NOT constant across a capture.
+
+- Displacement origin is GLOBAL, taken once: the first valid sample of the earliest
+  non-superseded acquisition in the reduced record (by corrected acquisition time). Every
+  sample of every acquisition in record.json is displacement relative to that single origin
+  count; do NOT reset displacement to zero at the start of each acquisition. Convert counts to
+  nanometres with the in-force pod sensitivity and divide out the thermal term at the pod
+  temperature. Displacement values carry a quantisation-floor tolerance; index and t are exact.
