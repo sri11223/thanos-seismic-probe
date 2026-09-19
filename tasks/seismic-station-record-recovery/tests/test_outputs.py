@@ -16,7 +16,7 @@ FLOAT_TOL = 0.05
 
 def _run_submission(input_dir, output_dir):
     output_dir.mkdir(parents=True, exist_ok=True)
-    r = subprocess.run(["/opt/venv/bin/python", str(REDUCE),
+    r = subprocess.run(["python3", str(REDUCE),
                         "--input", str(input_dir), "--output", str(output_dir)],
                        capture_output=True, text=True)
     return r
